@@ -240,7 +240,7 @@ for ATTR in $(echo $ATTRLIST | tr "," " "); do
 done
 
 # check exit status from smartctl
-if [ $(($TMPSTATUS & 1)) -gt 8 ] || [ $(($TMPSTATUS & 2)) -gt 16 ] || [ $(($TMPSTATUS & 32)) -gt 0 ] || \
+if [ $(($TMPSTATUS & 8)) -gt 0 ] || [ $(($TMPSTATUS & 16)) -gt 0 ] || [ $(($TMPSTATUS & 32)) -gt 0 ] || \
 [ $(($TMPSTATUS & 64)) -gt 0 ] || [ $(($TMPSTATUS & 128)) -gt 0 ]; then
 	WORST_STATUS=$ST_CR
 fi
