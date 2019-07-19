@@ -4,6 +4,7 @@
 #
 # License: GPL
 #
+# 2019.07.19 Version 1.1.0
 # 2017.12.04 Version 1.0.0
 
 PATH=/sbin:/usr/sbin:/bin:/usr/bin:/usr/local/sbin:/usr/local/bin
@@ -14,12 +15,13 @@ ST_CR=2
 ST_UN=3
 
 smartctl=$(which smartctl)
+command_prefix=""
 
 # Plugin name
 PROGNAME=$(basename $0)
 
 # Version
-VER="1.0.0"
+VER="1.1.0"
 
 TMPFILE=/tmp/smart.nagios.$$
 
@@ -52,23 +54,22 @@ print_help()
  -t TYPE
    Device type (-d option of smartctl)
  -l
-   Use attribute names instead of numbers for performance data. It can make
-   output much more longer.
+   Use attribute names instead of numbers for performance data. It can make output much more longer.
  -a ATTRIBUTES
-   Attributes is a comma-separated list of attribute tuples, where each tuple
-   is a semicolon-separated list of attribute number and warning and critical
-   values.
-   If warn and crit are single numbers, than the tuple have three numbers.
-   If warn and crit are ranges, than the tuple contains five numbers.
-   If warn and crit not set, than that attribute is view only, e.g. for graph.
-
-   Attribute example: -a 5:1:10,9,194:25:35:20:40
-   Attr 5, warning 1, critical 10
-   Attr 9, warning and critical not set
-   Attr 194, warning out of 25 and 35, critical out of 20 and 40
+   Attributes is a comma-separated list of attribute tuples, where each tuple is a semicolon-separated
+   list of attribute number and warning and critical values.
+   If warning and critical values are single numbers, than the tuple contains three numbers.
+   If warning and critical values are ranges, than the tuple contains five numbers.
+   If warning and critical values missing, than that attribute is logging only, e.g. for nagiosgraph.
 "
 	echo 
 	exit $ST_UN
+}
+
+status_promote()
+{
+	local _STATUS_CANDIDATE=$1
+	[ $_STATUS_CANDIDATE -ge $WORST_STATUS ] && WORST_STATUS=$_STATUS_CANDIDATE
 }
 
 check_attr()
@@ -90,18 +91,18 @@ if [ $ARG_CNT -eq 5 ]; then
 
 	( ( [ $ATTR_W_L -gt $ATTR_W_H ] && [ $ATTR_C_L -lt $ATTR_C_H ] ) || ( [ $ATTR_W_L -lt $ATTR_W_H ] && [ $ATTR_C_L -gt $ATTR_C_H ] ) ) && (echo >&2 "Bad attribute $ATTR_NUM warning-critical corellation." ; exit $ST_UN)
 
-	local ATTR_NAME=$(awk 'NF==10 && $1=='${ATTR_NUM}' && $3 ~ /0x/ {print $2}' $TMPFILE)
-	local ATTR_VAL=$(awk 'NF==10 && $1=='${ATTR_NUM}' && $3 ~ /0x/ {print $10}' $TMPFILE)
+	local ATTR_NAME=$(awk '$1=='${ATTR_NUM}' && $3 ~ /0x/ {print $2}' $TMPFILE)
+	local ATTR_VAL=$(awk '$1=='${ATTR_NUM}' && $3 ~ /0x/ {print $10}' $TMPFILE)
 
 	[ -z $ATTR_NAME ] && (echo >&2 "Device $DEVICE haven't SMART attribute num ${ATTR_NUM}." ; exit $ST_UN)
 
 	# compare attribute value with limits
 	if [ $ATTR_W_L -lt $ATTR_W_H ]; then
-		( [ $ATTR_W_L -ge $ATTR_VAL ] || [ $ATTR_W_H -le $ATTR_VAL ] ) && WORST_STATUS=$ST_WR
-		( [ $ATTR_C_L -ge $ATTR_VAL ] || [ $ATTR_C_H -le $ATTR_VAL ] ) && WORST_STATUS=$ST_CR
+		( [ $ATTR_W_L -ge $ATTR_VAL ] || [ $ATTR_W_H -le $ATTR_VAL ] ) && status_promote $ST_WR
+		( [ $ATTR_C_L -ge $ATTR_VAL ] || [ $ATTR_C_H -le $ATTR_VAL ] ) && status_promote $ST_CR
 	elif [ $ATTR_W_L -gt $ATTR_W_H ]; then
-		( [ $ATTR_W_L -le $ATTR_VAL ] || [ $ATTR_W_H -ge $ATTR_VAL ] ) && WORST_STATUS=$ST_WR
-		( [ $ATTR_C_L -le $ATTR_VAL ] || [ $ATTR_C_H -ge $ATTR_VAL ] ) && WORST_STATUS=$ST_CR
+		( [ $ATTR_W_L -le $ATTR_VAL ] || [ $ATTR_W_H -ge $ATTR_VAL ] ) && status_promote $ST_WR
+		( [ $ATTR_C_L -le $ATTR_VAL ] || [ $ATTR_C_H -ge $ATTR_VAL ] ) && status_promote $ST_CR
 	else
 		echo >&2 "Bad warning-critical corellation."
 		exit $ST_UN
@@ -112,6 +113,7 @@ if [ $ARG_CNT -eq 5 ]; then
 	elif [ $PERFDATA_LONG_NAME -eq 1 ]; then
 		PERFDATA="${PERFDATA} ${ATTR_NAME}=${ATTR_VAL};${ATTR_W_L}:${ATTR_W_H};${ATTR_C_L}:${ATTR_C_H}"
 	else
+		/bin/true
 	fi
 elif [ $ARG_CNT -eq 3 ]; then
 	local DEVICE=$1
@@ -122,18 +124,18 @@ elif [ $ARG_CNT -eq 3 ]; then
 	shift
 	local ATTR_C=$(echo $1 | awk -F: '{print $1}')
 
-	local ATTR_NAME=$(awk 'NF==10 && $1=='${ATTR_NUM}' && $3 ~ /0x/ {print $2}' $TMPFILE)
-	local ATTR_VAL=$(awk 'NF==10 && $1=='${ATTR_NUM}' && $3 ~ /0x/ {print $10}' $TMPFILE)
+	local ATTR_NAME=$(awk '$1=='${ATTR_NUM}' && $3 ~ /0x/ {print $2}' $TMPFILE)
+	local ATTR_VAL=$(awk '$1=='${ATTR_NUM}' && $3 ~ /0x/ {print $10}' $TMPFILE)
 
 	[ -z $ATTR_NAME ] && (echo >&2 "Device $DEVICE haven't SMART attribute num ${ATTR_NUM}." ; exit $ST_UN)
 
 	# compare attribute value with limits
 	if [ $ATTR_W -lt $ATTR_C ]; then
-		[ $ATTR_W -le $ATTR_VAL ] && WORST_STATUS=$ST_WR
-		[ $ATTR_C -le $ATTR_VAL ] && WORST_STATUS=$ST_CR
+		[ $ATTR_W -le $ATTR_VAL ] && status_promote $ST_WR
+		[ $ATTR_C -le $ATTR_VAL ] && status_promote $ST_CR
 	elif [ $ATTR_W -gt $ATTR_C ]; then
-		[ $ATTR_W -ge $ATTR_VAL ] && WORST_STATUS=$ST_WR
-		[ $ATTR_C -ge $ATTR_VAL ] && WORST_STATUS=$ST_CR
+		[ $ATTR_W -ge $ATTR_VAL ] && status_promote $ST_WR
+		[ $ATTR_C -ge $ATTR_VAL ] && status_promote $ST_CR
 	else
 		echo >&2 "Bad warning-critical corellation."
 		exit $ST_UN
@@ -144,6 +146,7 @@ elif [ $ARG_CNT -eq 3 ]; then
 	elif [ $PERFDATA_LONG_NAME -eq 1 ]; then
 		PERFDATA="${PERFDATA} ${ATTR_NAME}=${ATTR_VAL};${ATTR_W};${ATTR_C}"
 	else
+		/bin/true
 	fi
 elif [ $ARG_CNT -eq 1 ]; then
 	local DEVICE=$1
@@ -151,8 +154,8 @@ elif [ $ARG_CNT -eq 1 ]; then
 	local ATTR_NUM=$(echo $1 | awk -F: '{print $1}')
 	shift
 
-	local ATTR_NAME=$(awk 'NF==10 && $1=='${ATTR_NUM}' && $3 ~ /0x/ {print $2}' $TMPFILE)
-	local ATTR_VAL=$(awk 'NF==10 && $1=='${ATTR_NUM}' && $3 ~ /0x/ {print $10}' $TMPFILE)
+	local ATTR_NAME=$(awk '$1=='${ATTR_NUM}' && $3 ~ /0x/ {print $2}' $TMPFILE)
+	local ATTR_VAL=$(awk '$1=='${ATTR_NUM}' && $3 ~ /0x/ {print $10}' $TMPFILE)
 
 	[ -z $ATTR_NAME ] && (echo >&2 "Device $DEVICE haven't SMART attribute num ${ATTR_NUM}." ; exit $ST_UN)
 
@@ -161,6 +164,7 @@ elif [ $ARG_CNT -eq 1 ]; then
 	elif [ $PERFDATA_LONG_NAME -eq 1 ]; then
 		PERFDATA="${PERFDATA} ${ATTR_NAME}=${ATTR_VAL};${ATTR_W};${ATTR_C}"
 	else
+		/bin/true
 	fi
 else
 	echo >&2 "Bad attribute list."
@@ -208,12 +212,17 @@ DEV_PATH=$(echo $DEVICE_NAME | grep -w 'dev')
 [ -z $smartctl ] && (echo >&2 -e "\nMissing $smartctl" ; exit $ST_UN)
 
 if [ $DEVTYPE ]; then
-	$smartctl -d $DEVTYPE -a $DEVICE > $TMPFILE
+	$command_prefix $smartctl -d $DEVTYPE -a $DEVICE > $TMPFILE
+	TMPSTATUS=$?
 	DEVICE_NAME="${DEVTYPE}(${DEVICE_NAME})"
 else
-	$smartctl -a $DEVICE > $TMPFILE
+	$command_prefix $smartctl -a $DEVICE > $TMPFILE
+	TMPSTATUS=$?
 fi
-[ $? -ne 0 ] && (echo >&2 "Error in smartctl execution" ; exit $ST_UN)
+if [ $(($TMPSTATUS & 1)) -gt 0 ] || [ $(($TMPSTATUS & 2)) -gt 0 ]; then
+	echo >&2 "Error in smartctl execution"
+	exit $ST_UN
+fi
 SMART_SUPPORT=$(awk '/SMART support is/ {print $4}' $TMPFILE | tail -n 1)
 
 if [ "$SMART_SUPPORT" = "Unavailable" ]; then
@@ -229,6 +238,12 @@ WORST_STATUS=$ST_OK
 for ATTR in $(echo $ATTRLIST | tr "," " "); do
 	check_attr $DEVICE_NAME $(echo $ATTR | tr ":" " ")
 done
+
+# check exit status from smartctl
+if [ $(($TMPSTATUS & 1)) -gt 8 ] || [ $(($TMPSTATUS & 2)) -gt 16 ] || [ $(($TMPSTATUS & 32)) -gt 0 ] || \
+[ $(($TMPSTATUS & 64)) -gt 0 ] || [ $(($TMPSTATUS & 128)) -gt 0 ]; then
+	WORST_STATUS=$ST_CR
+fi
 
 case $WORST_STATUS in
 	0) echo "$DEVICE_NAME OK |$PERFDATA"
