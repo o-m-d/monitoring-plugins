@@ -94,7 +94,10 @@ if [ $ARG_CNT -eq 5 ]; then
 	local ATTR_NAME=$(awk '$1=='${ATTR_NUM}' && $3 ~ /0x/ {print $2}' $TMPFILE)
 	local ATTR_VAL=$(awk '$1=='${ATTR_NUM}' && $3 ~ /0x/ {print $10}' $TMPFILE)
 
-	[ -z $ATTR_NAME ] && (echo >&2 "Device $DEVICE haven't SMART attribute num ${ATTR_NUM}." ; exit $ST_UN)
+	if [ -z $ATTR_NAME ]; then
+		echo >&2 "Device $DEVICE haven't SMART attribute num ${ATTR_NUM}."
+		exit $ST_UN
+	fi
 
 	# compare attribute value with limits
 	if [ $ATTR_W_L -lt $ATTR_W_H ]; then
@@ -127,7 +130,10 @@ elif [ $ARG_CNT -eq 3 ]; then
 	local ATTR_NAME=$(awk '$1=='${ATTR_NUM}' && $3 ~ /0x/ {print $2}' $TMPFILE)
 	local ATTR_VAL=$(awk '$1=='${ATTR_NUM}' && $3 ~ /0x/ {print $10}' $TMPFILE)
 
-	[ -z $ATTR_NAME ] && (echo >&2 "Device $DEVICE haven't SMART attribute num ${ATTR_NUM}." ; exit $ST_UN)
+	if [ -z $ATTR_NAME ]; then
+		echo >&2 "Device $DEVICE haven't SMART attribute num ${ATTR_NUM}."
+		exit $ST_UN
+	fi
 
 	# compare attribute value with limits
 	if [ $ATTR_W -lt $ATTR_C ]; then
@@ -157,7 +163,10 @@ elif [ $ARG_CNT -eq 1 ]; then
 	local ATTR_NAME=$(awk '$1=='${ATTR_NUM}' && $3 ~ /0x/ {print $2}' $TMPFILE)
 	local ATTR_VAL=$(awk '$1=='${ATTR_NUM}' && $3 ~ /0x/ {print $10}' $TMPFILE)
 
-	[ -z $ATTR_NAME ] && (echo >&2 "Device $DEVICE haven't SMART attribute num ${ATTR_NUM}." ; exit $ST_UN)
+	if [ -z $ATTR_NAME ]; then
+		echo >&2 "Device $DEVICE haven't SMART attribute num ${ATTR_NUM}."
+		exit $ST_UN
+	fi
 
 	if [ $PERFDATA_LONG_NAME -eq 0 ]; then
 		PERFDATA="${PERFDATA} ${ATTR_NUM}=${ATTR_VAL};${ATTR_W};${ATTR_C}"
